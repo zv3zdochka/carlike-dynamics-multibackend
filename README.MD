@@ -22,13 +22,13 @@ are directly comparable.
 
 **State equations**
 
-![state](https://latex.codecogs.com/svg.image?\Large\color{white}\textbf{State:}\;X=(x,y,\theta))
+**State:** ![state](https://latex.codecogs.com/svg.image?\color{white}X=(x,y,\theta))  
+**Control:** ![control](https://latex.codecogs.com/svg.image?\color{white}u\text{~(turn%20rate)},\;V\text{~–~constant%20forward%20speed})
 
-![control](https://latex.codecogs.com/svg.image?\Large\color{white}\textbf{Control:}\;u\;\text{(turn%20rate)},\;\text{constant%20forward%20speed}\;V)
+**Equations of Motion:**
 
-### Equations of Motion
+![eq](https://latex.codecogs.com/svg.image?\color{white}\begin{cases}\dot{x}=V\cos\theta,\\[4pt]\dot{y}=V\sin\theta,\\[4pt]\dot{\theta}=u.\end{cases})
 
-![equations](https://latex.codecogs.com/svg.image?\Large\color{white}\left\{\begin{aligned}\dot{x}&=V\cos\theta\\\dot{y}&=V\sin\theta\\\dot{\theta}&=u\end{aligned}\right.)
 
 **Available explicit integrators (in all backends):**
 - Euler  
