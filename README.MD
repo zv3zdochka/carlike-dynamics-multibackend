@@ -71,7 +71,6 @@ pixel_method_3d.py          # main: grid build, front propagation, benchmark, pl
 control_method_3d.py        # alt static visualization
 control_method2_3d.py       # alt static visualization (variant)
 control_method_3d_gif.py    # animation via matplotlib.animation
-SCHEMA.md                   # index↔coordinate mapping & front propagation
 
 Differential_Equasions_2D_Bench.ipynb   # exploratory timings/plots (2D)
 Differential_Equasions_3D_Bench.ipynb   # exploratory timings/plots (3D)
