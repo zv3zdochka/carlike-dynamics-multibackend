@@ -14,28 +14,37 @@ are directly comparable.
 - **2D module (`module_2d/`)** — particle/cloud rollout of \(N\) independent states; focuses on throughput and backend
   comparisons.
 
+Вот цельный рабочий Markdown-кусок, который корректно отображается на GitHub без ошибок форматирования:
+
 ---
 
 ## 1. Model
 
-State $X=(x,y,\theta)$, control $u$ (turn rate), constant forward speed $V$:
-$$
-\dot{x} = V\cos\theta,\qquad
-\dot{y} = V\sin\theta,\qquad
-\dot{\theta} = u.
-$$
+**State equations**
 
+![state](https://latex.codecogs.com/svg.image?\Large\textbf{State:}\;X=(x,y,\theta))
+  
+![control](https://latex.codecogs.com/svg.image?\Large\textbf{Control:}\;u\;\text{(turn%20rate)},\;\text{constant%20forward%20speed}\;V)
+
+### Equations of Motion
+
+![equations](https://latex.codecogs.com/svg.image?\Large\begin{cases}\dot{x}=V\cos\theta,\\[4pt]\dot{y}=V\sin\theta,\\[4pt]\dot{\theta}=u.\end{cases})
+
+**Available explicit integrators (in all backends):**
+- Euler  
+- Runge–Kutta 2 (midpoint)  
+- Runge–Kutta 4 (classical)
 Available explicit integrators (in all backends):
 
-* Euler
-* Runge–Kutta 2 (midpoint)
-* Runge–Kutta 4 (classical)
+- Euler  
+- Runge–Kutta 2 (midpoint)  
+- Runge–Kutta 4 (classical)
 
 Backends:
 
-* **CPU (NumPy)** — portable baseline
-* **Torch** — CPU or CUDA (auto-selected; can be forced to CPU)
-* **PyCUDA** — custom CUDA kernels
+- **CPU (NumPy)** — portable baseline  
+- **Torch** — CPU or CUDA (auto-selected; can be forced to CPU)  
+- **PyCUDA** — custom CUDA kernels
 
 ---
 
