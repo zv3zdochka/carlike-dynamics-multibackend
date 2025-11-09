@@ -1,247 +1,200 @@
-# 2D/3D Car‑like Dynamics — Pixel/Control Methods with CPU, Torch, and PyCUDA Backends
+# Car-like Dynamics Benchmark (2D & 3D)
 
-This repo contains **two related modules** that simulate a simple car‑like dynamical system in (x, y, θ) using several numerical integrators and compute/visualize reachable sets:
+![Python](https://img.shields.io/badge/Python-3.10+-blue)
+![Backends](https://img.shields.io/badge/Backends-NumPy%20%7C%20Torch%20%7C%20PyCUDA-green)
+![Integrators](https://img.shields.io/badge/Integrators-Euler%2C%20RK2%2C%20RK4-orange)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
 
-* **3D module** — grid‑based ("pixel") method on a 3D lattice over (x, y, θ). Includes visualization and a ready benchmark across backends (CPU / Torch / PyCUDA) and integrators (Euler, RK2, RK4).
-* **2D module** — particle/cloud method that rolls out **N** independent states in parallel and benchmarks the same integrators across backends.
+This repository contains two complementary modules for simulating a car-like kinematic model and benchmarking explicit
+time-stepping schemes across multiple compute backends. The modules share the same dynamics and aligned APIs so results
+are directly comparable.
 
-Both modules use the same kinematic model and share a consistent interface across backends to compare performance.
+- **3D module (`module_3d/`)** — grid-based (“pixel”) propagation of the reachable set on a lattice over \((
+  x,y,\theta)\); includes visualizations and a ready-to-run benchmark.
+- **2D module (`module_2d/`)** — particle/cloud rollout of \(N\) independent states; focuses on throughput and backend
+  comparisons.
 
 ---
 
-## 🔧 Mathematical model
+## 1. Model
 
-State (X = (x, y, \theta)), control (u) (turn rate), constant forward speed (V):
+State $X=(x,y,\theta)$, control $u$ (turn rate), constant forward speed $V$:
+$$
+\dot{x} = V\cos\theta,\qquad
+\dot{y} = V\sin\theta,\qquad
+\dot{\theta} = u.
+$$
 
-[\dot x = V\cos\theta,\qquad \dot y = V\sin\theta,\qquad \dot\theta = u.]
+Available explicit integrators (in all backends):
 
-Backends implement three explicit integrators:
-
-* **Euler**
-* **Runge–Kutta 2 (midpoint)**
-* **Runge–Kutta 4 (classical)**
+* Euler
+* Runge–Kutta 2 (midpoint)
+* Runge–Kutta 4 (classical)
 
 Backends:
 
 * **CPU (NumPy)** — portable baseline
-* **Torch** — CPU or CUDA, auto‑selected; can be forced to CPU
+* **Torch** — CPU or CUDA (auto-selected; can be forced to CPU)
 * **PyCUDA** — custom CUDA kernels
 
 ---
 
-## 📦 Project layout (files & roles)
+## 2. Repository layout
 
-### 3D module (grid‑based / pixel method)
+```
 
-* **`pixel_method_3d.py`** — main entry point for the 3D pixel method:
+module_2d/
+**init**.py
+computations_cpu.py         # NumPy backend
+computations_torch.py       # Torch backend (CPU/CUDA)computations_pycuda.py      # PyCUDA backend
+control_main.py             # CLI benchmark (plots bar chart)
+pixel_method_2d_base.py     # minimal NumPy demo/baseline
 
-  * Builds 3D grid over `(x, y, z)` where `z ≡ θ`.
-  * Generates the set of admissible controls `all_u`.
-  * Calls backend‐agnostic solvers to propagate the **front** of reachable voxels over time.
-  * **Benchmarks** Euler/RK2/RK4 on CPU, Torch, PyCUDA and draws a **bar chart** comparing runtimes.
-  * Visualization helpers: `draw2d(q, ...)` (heatmap slices) and `draw(m, ...)` (3D scatter of reachable set `m`).
+module_3d/
+**init**.py
+computations_cpu.py         # NumPy backend (grid utilities: ij_to_xy, xy_to_ij, ...)
+computations_torch.py       # Torch backend
+computations_pycuda.py      # PyCUDA backend (grid expansion kernels)
+pixel_method_3d.py          # main: grid build, front propagation, benchmark, plots
+control_method_3d.py        # alt static visualization
+control_method2_3d.py       # alt static visualization (variant)
+control_method_3d_gif.py    # animation via matplotlib.animation
+SCHEMA.md                   # index↔coordinate mapping & front propagation
 
-* **`control_method_3d.py`** — alternative 3D visualizer for control method (static frames); chooses Torch vs CPU automatically by `torch.cuda.is_available()`.
+Differential_Equasions_2D_Bench.ipynb   # exploratory timings/plots (2D)
+Differential_Equasions_3D_Bench.ipynb   # exploratory timings/plots (3D)
+requirements.txt
+README.md
 
-* **`control_method2_3d.py`** — same idea as above with slightly different styling/flow for the rendering of multiple starting points / fronts.
-
-* **`control_method_3d_gif.py`** — animation script using `matplotlib.animation` to produce a GIF of the front evolution over time.
-
-* **`computations_cpu.py`** — NumPy backend for grid propagation & integrators.
-
-  * Key functions (names may vary slightly by revision): `get_points`, `foo` (RHS), `euler`, `runge_kutta_2`, `runge_kutta_4`, `ij_to_xy`, `xy_to_ij`, `solve_control`, `solve`, `get_all_u`, `solve_pixel`.
-  * Returns the reachable mask `q`, the set of visited indices `m`, the newly added shell `sm`, and timing.
-
-* **`computations_torch.py`** — Torch backend (uses GPU if available). Same API as CPU version for comparability.
-
-* **`computations_pycuda.py`** — PyCUDA backend with custom kernels. Same API contract; focuses on throughput of grid expansion.
-
-* **`SCHEMA.md`** — reference doc explaining how `(i, j, k)` indices map to real coordinates and how `ij_to_xy` / `xy_to_ij` work, plus how the **front** propagates over the grid.
-
-* **`Differential_Equasions_3D_Bench.ipynb`** — an exploratory notebook for timing/plots of the 3D setup.
-
-### 2D module (particle/cloud method)
-
-* **`control_main.py`** — CLI benchmark runner for 2D (actually still `(x, y, θ)` but in a particle model):
-
-  * Spawns **N** independent particles with random initial states and per‑particle control `u`.
-  * Benchmarks **Euler / RK2 / RK4** on available backends.
-  * Produces a **bar plot** of runtime by backend & method.
-  * **CLI options:**
-
-    * `--n INT` (default `200_000`) — number of particles
-    * `--steps INT` (default `200`) — number of integration steps
-    * `--dt FLOAT` (default `1e-2`) — step size
-    * `--V FLOAT` (default `1.0`) — forward speed
-    * `--seed INT` (default `42`)
-    * `--force_torch_cpu` — set `TORCH_FORCE_CPU=1` before import
-    * `--disable_jit` — set `PYTORCH_JIT=0` before import
-
-* **`pixel_method_2d_base.py`** — simple NumPy baseline of the same dynamics and integrators; helpful for correctness checks and small demos.
-
-* **`computations_cpu.py`** — NumPy backend for particle rollouts:
-
-  * API: `to_backend`, `sync`, `shape`, `evaluate_field`, `euler_step`, `euler_rollout`.
-
-* **`computations_torch.py`** — Torch backend:
-
-  * Device management helpers: `_set_device`, `force_cpu`, `backend_info`.
-  * API: `to_backend`, `sync`, `shape`, `evaluate_field`, `euler_step`, `euler_rollout`.
-
-* **`computations_pycuda.py`** — PyCUDA backend with kernels for field evaluation and Euler step; includes a simple 1D grid helper `_grid1d`.
-
-> **Inter‑module relation.** Both modules implement the **same kinematics** and similar integrator APIs so you can compare algorithmic vs hardware effects in either a **grid‑front** (3D) or **particle** (2D) formulation.
+````
 
 ---
 
-## 🖥️ Requirements & installation
+## 3. Installation
 
-* Python 3.10+
-* Packages (install what you need for your chosen backend):
+- Python 3.10+
+- Install only these libraries:
 
-  ```bash
-  pip install numpy matplotlib seaborn
-  # Optional backends
-  pip install torch           # choose CUDA build from pytorch.org if using GPU
-  pip install pycuda          # requires a working NVIDIA CUDA toolkit/driver
-  ```
-* **CUDA (optional):**
+```bash
+pip install numpy matplotlib
+pip install torch           # install CUDA-enabled wheel if using GPU
+pip install pycuda          # requires NVIDIA driver + CUDA toolkit (nvcc)
+````
 
-  * For Torch: install the PyTorch wheel matching your CUDA runtime & driver.
-  * For PyCUDA: ensure `nvcc` and a compatible driver are installed.
+Rr you can install all the previous libraries from Colab (9.11.2025).
 
-Headless servers: set `matplotlib` backend or save figures to files instead of `plt.show()`.
+```bash
+pip install -r requirements.txt
+```
+
+**CUDA notes**
+
+* Torch: use a wheel matching your driver/runtime.
+* PyCUDA: ensure `nvcc` is on `PATH` and driver/toolkit versions are compatible.
+
+Headless environments: set a non-interactive Matplotlib backend or save figures to files instead of calling
+`plt.show()`.
 
 ---
 
-## ▶️ Quick start
+## 4. Quick start
 
-### 3D (grid/pixel method + benchmark)
-
-Run and get both visuals and a runtime comparison:
+### 4.1 3D reachable set (grid/pixel) with benchmark
 
 ```bash
-python pixel_method_3d.py
+python module_3d/pixel_method_3d.py
 ```
 
-This will:
+This script:
 
-1. Build a grid (defaults like `x∈[-5,5]`, `y∈[-5,5]`, `θ∈[-10,10]` with given steps).
-2. Generate admissible controls `all_u` (elliptic constraint typical form `u1^2 + 25 u2^2 ≤ 1`).
-3. Propagate the front over `t ∈ [0, 3π/2]` with step `dt` using **Euler, RK2, RK4** on **CPU/Torch/PyCUDA**.
-4. Render 3D reachable set scatter and 2D heatmaps.
-5. Plot a **bar chart** of total times per backend & method.
+1. builds a 3D grid (defaults: (x,y\in[-5,5]), (\theta\in[-10,10]));
+2. generates admissible controls (e.g., an elliptic set (u_1^2 + 25u_2^2 \le 1));
+3. propagates the front over (t\in[0, 3\pi/2]) with step (dt) using Euler/RK2/RK4 on CPU/Torch/PyCUDA;
+4. renders a 3D scatter of the reachable set and 2D heatmap slices;
+5. produces a runtime bar chart by backend/integrator.
 
-For static frames/alternative views:
+Alternative views:
 
 ```bash
-python control_method_3d.py
-python control_method2_3d.py
+python module_3d/control_method_3d.py
+python module_3d/control_method2_3d.py
 ```
 
-For an animation (GIF):
+Animation:
 
 ```bash
-python control_method_3d_gif.py
+python module_3d/control_method_3d_gif.py
 ```
 
-### 2D (particle/cloud method + benchmark)
-
-Run the large‑N rollout benchmark and produce a bar chart:
+### 4.2 2D particle/cloud rollout with benchmark
 
 ```bash
-python control_main.py --n 200000 --steps 200 --dt 1e-2 --V 1.0
+python module_2d/control_main.py --n 200000 --steps 200 --dt 1e-2 --V 1.0
 ```
 
-Flags to control Torch behavior:
+Torch control flags:
 
 ```bash
-python control_main.py --force_torch_cpu        # ignore CUDA even if present
-python control_main.py --disable_jit            # disable TorchScript/JIT
+python module_2d/control_main.py --force_torch_cpu   # ignore CUDA even if present
+python module_2d/control_main.py --disable_jit       # disable TorchScript/JIT
 ```
 
-Expected output:
+**Outputs**
 
-* Console: per‑backend initialization info and per‑method elapsed times.
-* Figure: grouped bar chart **CPU vs TORCH vs PYCUDA** for **Euler / RK2 / RK4**.
-
-> Tip: increase `--n` and `--steps` for stress tests; keep an eye on GPU memory for Torch/PyCUDA.
+* Console: per-backend initialization info and elapsed times per integrator.
+* Figure: grouped bar chart (CPU vs Torch vs PyCUDA; Euler/RK2/RK4).
 
 ---
 
-## 🧪 Benchmark methodology
+## 5. Benchmark methodology
 
-Both modules benchmark the same **numerical kernels** under different compute backends.
+**What is measured** — wall-clock time for a fixed amount of work:
 
-**What’s measured:** wall‑clock time to complete a fixed number of integration steps:
+* **2D:** (N) particles × `steps` with step `dt`.
+* **3D:** fixed grid ((n_x,n_y,n_z)), fixed number of time layers, fixed control set size.
 
-* **2D:** `N` particles rolled out for `steps` steps with step `dt`.
-* **3D:** number of time layers over `t` with fixed grid resolution `(nx, ny, nz)` and admissible controls set size.
+**Integrators** — Euler, RK2, RK4.
+**Backends** — NumPy (CPU), Torch (CPU/CUDA), PyCUDA (CUDA).
+**Results** — timings are printed to stdout; the driver scripts also render bar charts.
 
-**Integrators:** Euler, RK2, RK4.
+**Reproducibility**
 
-**Backends:** CPU (NumPy), Torch (CPU or CUDA), PyCUDA.
+* 2D: use `--seed` to fix random initial states/controls.
+* 3D: the grid/time grids are deterministic given the defaults.
+* GPU runs call explicit synchronizations (Torch `cuda.synchronize()` / PyCUDA stream sync) before timing.
 
-**Outputs:** a dict of times per (method, backend) and a bar plot summarizing results. The 3D script also displays intermediate reachable‐set plots for sanity checks.
-
-**Reproducibility:**
-
-* 2D: `--seed` controls random initial conditions and controls.
-* 3D: grid ranges/steps and `t` grid are deterministic given the script defaults.
-* Torch GPU runs call `torch.cuda.synchronize()` where appropriate; PyCUDA kernels synchronize before timing is recorded.
-
----
-
-## ⚙️ Configuration knobs
-
-* **Grid (3D):** `x_start/x_finish/nx`, `y_start/...`, `z_start/...`; time grid `t_start/t_finish/nt` with `dt = t[1]-t[0]`.
-* **Particle count (2D):** `--n`, `--steps`, `--dt`, `--V`.
-* **Controls:** 3D `get_all_u(...)` builds an admissible set; adjust to change the turning‑rate envelope.
-* **Backends:** 3D scripts auto‑import Torch vs CPU by availability; 2D CLI runs all present backends and labels missing ones.
+> Tip: for stress tests, increase `--n` / `--steps` (2D) or grid resolution/time layers (3D). Monitor GPU memory
+> pressure when using Torch/PyCUDA.
 
 ---
 
-## 🖼️ Visualization
+## 6. Configuration
+
+* **3D grid** — `x_start/x_finish/nx`, `y_start/...`, `z_start/...`; time grid `t_start/t_finish/nt` with
+  `dt = t[1]-t[0]`.
+* **2D particles** — `--n`, `--steps`, `--dt`, `--V`.
+* **Controls (3D)** — built via `get_all_u(...)`; tune to change the turning-rate envelope.
+* **Backends** — 3D scripts auto-select Torch vs CPU; the 2D CLI runs all available backends and reports missing ones.
+
+---
+
+## 7. Visualization
 
 * **3D**
 
-  * `draw(m, title)` — scatter of reachable voxels
-  * `draw2d(q, title)` — 2D heatmap slices with labeled ticks
-  * `control_method_3d_gif.py` — time‑lapse animation
+    * `draw(m, title)` — 3D scatter of reachable voxels.
+    * `draw2d(q, title)` — heatmap slices (indexed grid).
+    * `control_method_3d_gif.py` — time-lapse animation.
 * **2D**
 
-  * `control_main.py` generates the benchmark **bar chart**
+    * `control_main.py` — grouped bar chart of runtimes.
 
-Use `plt.savefig("file.png", dpi=200, bbox_inches="tight")` if running headless.
+When running headless:
 
----
+```python
+plt.savefig("figure.png", dpi=200, bbox_inches="tight")
+```
 
-## 🩺 Troubleshooting
 
-* **Torch: `CUDA driver error: invalid resource handle`**
 
-  * Usually indicates a stale CUDA context. Restart the Python process/kernel.
-  * Ensure driver/toolkit compatibility; try `--force_torch_cpu` as a fallback.
 
-* **PyCUDA: `TypeError: invalid type on parameter #0 (0-based)`**
-
-  * Occurs if a kernel expects GPU pointers but receives plain Python/NumPy scalars.
-  * Use the provided wrappers (`to_backend`, `evaluate_field`, `euler_step`) that manage `gpuarray` types.
-  * Ensure arrays are `float32` and contiguous.
-
-* **Matplotlib windows don’t open**
-
-  * Use a non‑interactive backend or save plots to files.
-
----
-
-## 📚 Notes
-
-* See **`SCHEMA.md`** in the 3D module for the precise definition of index ↔ coordinate transforms and the "front" expansion logic.
-* Both modules are designed for side‑by‑side **algorithmic** and **hardware** comparisons. Keep the APIs aligned when extending functionality to maintain a fair benchmark.
-
----
-
-## 📝 License & authorship
-
-Add your preferred license here. Replace this section with authors/affiliations if needed.
