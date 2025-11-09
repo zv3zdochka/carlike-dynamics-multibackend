@@ -27,7 +27,7 @@ are directly comparable.
 
 **Equations of Motion:**
 
-![eq](https://latex.codecogs.com/svg.image?\color{white}\begin{cases}\dot{x}=V\cos\theta,\\[4pt]\dot{y}=V\sin\theta,\\[4pt]\dot{\theta}=u.\end{cases})
+![eq](https://latex.codecogs.com/svg.image?\color{white}\begin{cases}\dot{x}=V\cos\theta,\\\dot{y}=V\sin\theta,\\\dot{\theta}=u.\end{cases})
 
 
 **Available explicit integrators (in all backends):**
