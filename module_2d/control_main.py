@@ -8,7 +8,10 @@ import numpy as np
 import argparse
 import math
 import matplotlib.pyplot as plt
+import seaborn as sns
 from pathlib import Path
+
+# -------------------------- Бэкенды -----------------------------------------
 
 BACKENDS = [
     ("CPU", "computations_cpu"),
@@ -85,6 +88,160 @@ def import_local_fresh(module_name: str):
     return importlib.import_module(module_name)
 
 
+# ---------------------- ВИЗУАЛИЗАЦИЯ РЕШЕНИЙ (heatmap) -----------------------
+# Реализация по мотивам твоего кода с foo / сеткой и перебором управлений.
+# Здесь всё чисто на NumPy, бэкенды не трогаем. Графики строятся по методам,
+# а в заголовке добавляем имя бэкенда, чтобы получить 3 * nb картинок.
+
+LINE_INTERPOLATION = False
+
+# Параметры сетки и времени (как в примере)
+HM_X_START, HM_X_FINISH, HM_DX = -2.0, 2.0, 0.0083
+HM_Y_START, HM_Y_FINISH, HM_DY = -2.0, 2.0, 0.0083
+HM_T_START, HM_T_FINISH, HM_DT = 0.0, 2.7, 0.3
+HM_U_START, HM_U_FINISH, HM_DU = -1.0, 1.0, 0.05
+
+HM_X = np.arange(HM_X_START, HM_X_FINISH + HM_DX, HM_DX)
+HM_Y = np.arange(HM_Y_START, HM_Y_FINISH + HM_DY, HM_DY)
+HM_T = np.arange(HM_T_START, HM_T_FINISH + HM_DT, HM_DT)
+HM_U = np.arange(HM_U_START, HM_U_FINISH + HM_DU, HM_DU)
+
+
+def hm_get_points(ij_st, ij_fn):
+    if LINE_INTERPOLATION:
+        n = np.max(np.abs(ij_st - ij_fn))
+        iijj = np.linspace(ij_st, ij_fn, n + 1, dtype=int, axis=0).T
+        return iijj
+    return ij_fn.reshape(-1, 1)
+
+
+def hm_get_all_u(u_):
+    res = []
+    for u1 in u_:
+        for u2 in u_:
+            if u1 ** 2 + 25 * u2 ** 2 <= 1:
+                res.append([u1, u2])
+    return np.array(res)
+
+
+HM_ALL_U = hm_get_all_u(HM_U)
+
+# начальное множество (точка (1, 0))
+HM_M0 = np.array([[1.0, 0.0]]).T
+
+
+def hm_foo(t_, x_, u_):
+    # x_: shape (2, M), u_: shape (2,)
+    return np.array([
+        -u_[1] * x_[0] + u_[0] * x_[1],
+        -u_[0] * x_[0] - u_[1] * x_[1],
+    ])
+
+
+def hm_euler_step(t0, dt, x_, u_):
+    return x_ + hm_foo(t0, x_, u_) * dt
+
+
+def hm_rk2_step(t0, dt, x_, u_):
+    # классический midpoint RK2
+    k1 = hm_foo(t0, x_, u_)
+    x_mid = x_ + 0.5 * dt * k1
+    k2 = hm_foo(t0 + 0.5 * dt, x_mid, u_)
+    return x_ + dt * k2
+
+
+def hm_rk4_step(t0, dt, x_, u_):
+    k1 = hm_foo(t0, x_, u_)
+    k2 = hm_foo(t0 + 0.5 * dt, x_ + 0.5 * dt * k1, u_)
+    k3 = hm_foo(t0 + 0.5 * dt, x_ + 0.5 * dt * k2, u_)
+    k4 = hm_foo(t0 + dt, x_ + dt * k3, u_)
+    return x_ + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+
+
+def hm_ij_to_xy(ij):
+    # ij: shape (2, M)
+    return np.vstack([
+        ij[0] * HM_DX + HM_X_START,
+        ij[1] * HM_DY + HM_Y_START,
+    ])
+
+
+def hm_xy_to_ij(xy):
+    # xy: shape (2, M)
+    i = np.clip(np.round((xy[0] - HM_X_START) / HM_DX), 0, HM_X.shape[0] - 1)
+    j = np.clip(np.round((xy[1] - HM_Y_START) / HM_DY), 0, HM_Y.shape[0] - 1)
+    return np.vstack([i, j]).astype(int)
+
+
+def hm_solve(method="RK4"):
+    idx = hm_xy_to_ij(HM_M0)
+    m = {(int(idx[0, i]), int(idx[1, i])) for i in range(idx.shape[1])}
+    sm = m.copy()
+
+    for t_curr in HM_T:
+        m_new = set()
+        if not sm:
+            break
+        ij_arr = np.array(list(sm)).T  # shape (2, M)
+        xx = hm_ij_to_xy(ij_arr)
+
+        for u_vec in HM_ALL_U:
+            if method == "RK4":
+                xx_new = hm_rk4_step(t_curr, HM_DT, xx, u_vec)
+            elif method == "RK2":
+                xx_new = hm_rk2_step(t_curr, HM_DT, xx, u_vec)
+            elif method == "Euler":
+                xx_new = hm_euler_step(t_curr, HM_DT, xx, u_vec)
+            else:
+                raise NotImplementedError(f"Unknown method {method}")
+
+            ij_new = hm_xy_to_ij(xx_new)
+
+            for r in range(ij_new.shape[1]):
+                line = hm_get_points(ij_arr[:, r], ij_new[:, r])
+                for k in range(line.shape[1]):
+                    m_new.add((int(line[0, k]), int(line[1, k])))
+
+        sm = m_new - m
+        m |= m_new
+        print(f"[VIS] t={t_curr:.2f}, new points={len(sm)}, total={len(m)}")
+
+    q = np.zeros((HM_Y.shape[0], HM_X.shape[0]), dtype=np.float32)
+    if m:
+        ij_ = tuple(np.array(list(m)).T)
+        q[ij_] = 1.0
+    return q.T  # shape (len(HM_X), len(HM_Y))
+
+
+def hm_draw(q, method, backend_name=None):
+    xticklabels = [
+        "" if i % 20 != 0 else np.round(HM_X[i], 3) for i in range(HM_X.shape[0])
+    ]
+    yticklabels = [
+        "" if i % 20 != 0 else np.round(HM_Y[i], 3) for i in range(HM_Y.shape[0])
+    ]
+    plt.figure(figsize=(6, 6))
+    ax = sns.heatmap(
+        q,
+        xticklabels=xticklabels,
+        yticklabels=yticklabels,
+        cbar=False,
+        square=True,
+    )
+    ax.set(ylim=ax.get_ylim()[::-1])
+    title = f"Method {method}"
+    if backend_name is not None:
+        title += f" | backend: {backend_name}"
+    plt.title(title)
+    plt.xlabel("y")
+    plt.ylabel("x")
+    plt.tight_layout()
+    plt.show()
+
+
+# ----------------------------- main -----------------------------------------
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=200_000)
@@ -96,6 +253,8 @@ def main():
                     help="Force-disable CUDA in Torch (sets TORCH_FORCE_CPU=1 before import)")
     ap.add_argument("--disable_jit", action="store_true",
                     help="Disable Torch JIT (sets PYTORCH_JIT=0 before import)")
+    ap.add_argument("--no_solution_plots", action="store_true",
+                    help="Disable solution heatmaps (only timing + bar chart)")
     args = ap.parse_args()
 
     if args.force_torch_cpu:
@@ -166,6 +325,7 @@ def main():
         )
         print(row)
 
+    # --- столбчатый график времени (как было) ---
     x_idx = np.arange(len(methods))
     nb = len(present_backends)
     width = 0.8 / nb
@@ -183,6 +343,17 @@ def main():
     plt.legend()
     plt.tight_layout()
     plt.show()
+
+    # --- дополнительные 2D-графики решений по мотивам foo-сценария ---
+    if not args.no_solution_plots:
+        print("\n[VIS] Computing solution heatmaps for each method...")
+        heatmaps_cache = {}
+        for m in methods:
+            heatmaps_cache[m] = hm_solve(m)
+
+        for bname in present_backends:
+            for m in methods:
+                hm_draw(heatmaps_cache[m], method=m, backend_name=bname)
 
 
 if __name__ == "__main__":
